@@ -28,6 +28,7 @@ class System:
     user: str
     client: str
     verify_tls: bool = True
+    description: str = ""
 
     @property
     def keychain_account(self) -> str:
@@ -66,10 +67,35 @@ def save_system(system: System, make_default: bool = False) -> None:
         "user": system.user,
         "client": system.client,
         "insecure": not system.verify_tls,
+        "description": system.description,
     }
     if make_default or not raw.get("default_system"):
         raw["default_system"] = system.name
 
+    _write_raw(raw)
+
+
+def set_default(name: str) -> None:
+    raw = _read_raw()
+    if name not in raw.get("systems", {}):
+        raise ConfigError(
+            f"unknown system '{name}', available: {', '.join(sorted(raw.get('systems', {})))}"
+        )
+    raw["default_system"] = name
+    _write_raw(raw)
+
+
+def remove_system(name: str) -> None:
+    raw = _read_raw()
+    if name not in raw.get("systems", {}):
+        raise ConfigError(f"unknown system '{name}'")
+    del raw["systems"][name]
+    if raw.get("default_system") == name:
+        raw["default_system"] = next(iter(raw["systems"]), "")
+    _write_raw(raw)
+
+
+def _write_raw(raw: dict) -> None:
     CONFIG_HOME.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_HOME.write_text(json.dumps(raw, indent=2, sort_keys=True) + "\n")
     CONFIG_HOME.chmod(0o600)
@@ -84,7 +110,7 @@ def resolve(
 ) -> System:
     """Build a System from config, environment and explicit flags (flags win)."""
     systems = list_systems()
-    chosen = name or default_system()
+    chosen = name or os.environ.get("ABAP_SYSTEM", "") or default_system()
 
     if not chosen and not (host and user and client):
         if systems:
@@ -120,6 +146,7 @@ def resolve(
         user=resolved_user,
         client=resolved_client,
         verify_tls=not (insecure or profile.get("insecure", False)),
+        description=str(profile.get("description", "")),
     )
 
 

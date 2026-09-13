@@ -73,16 +73,61 @@ def init(
     host: Annotated[str, typer.Option(prompt="Host URL (https://host:port)")],
     user: Annotated[str, typer.Option(prompt="SAP user")],
     client: Annotated[str, typer.Option(prompt="SAP client")],
+    description: Annotated[str, typer.Option(help="Free text, shown by 'abap systems'.")] = "",
     insecure: Annotated[bool, typer.Option(help="Skip TLS verification.")] = False,
     default: Annotated[bool, typer.Option(help="Make this the default system.")] = True,
 ) -> None:
     """Add a system to ~/.abap-cli/config.json."""
     system = System(
-        name=name, host=host.rstrip("/"), user=user, client=client, verify_tls=not insecure
+        name=name,
+        host=host.rstrip("/"),
+        user=user,
+        client=client,
+        verify_tls=not insecure,
+        description=description,
     )
     config.save_system(system, make_default=default)
     console.print(f"saved [bold]{name}[/] to {config.CONFIG_HOME}")
     console.print(f"next: [bold]abap login --system {name}[/]")
+
+
+@app.command()
+def use(system: Annotated[str, typer.Argument(help="System to make the default.")]) -> None:
+    """Set the default system used when --system is omitted."""
+    try:
+        config.set_default(system)
+    except ConfigError as exc:
+        _fail(str(exc))
+        return
+    console.print(f"default system is now [bold]{system}[/]")
+
+
+@app.command()
+def remove(system: Annotated[str, typer.Argument(help="System to forget.")]) -> None:
+    """Remove a system from the config."""
+    try:
+        config.remove_system(system)
+    except ConfigError as exc:
+        _fail(str(exc))
+        return
+    console.print(f"removed [bold]{system}[/]")
+
+
+@app.command(name="config")
+def show_config() -> None:
+    """Show where the config lives and how to override it."""
+    exists = config.CONFIG_HOME.is_file()
+    console.print(f"config file : [bold]{config.CONFIG_HOME}[/]{'' if exists else ' (not created yet)'}")
+    console.print(f"default     : {config.default_system() or '(none)'}")
+    console.print("\n[dim]environment overrides, useful for CI:[/]")
+    for name, purpose in (
+        ("ABAP_SYSTEM", "which system to use when --system is omitted"),
+        ("ABAP_HOST", "host URL"),
+        ("ABAP_USER", "SAP user"),
+        ("ABAP_CLIENT", "SAP client"),
+        ("ABAP_PASSWORD", "password, bypasses the keychain"),
+    ):
+        console.print(f"  {name:<14} {purpose}")
 
 
 @app.command()
@@ -100,7 +145,8 @@ def systems() -> None:
     table.add_column("host")
     table.add_column("client")
     table.add_column("user")
-    table.add_column("saved password")
+    table.add_column("password")
+    table.add_column("description", style="dim")
     for name, profile in sorted(configured.items()):
         account = f"{name}:{profile.get('user', '')}"
         table.add_row(
@@ -109,7 +155,8 @@ def systems() -> None:
             str(profile.get("host", "")),
             str(profile.get("client", "")),
             str(profile.get("user", "")),
-            "yes" if config.keychain_get(account) else "no",
+            "saved" if config.keychain_get(account) else "-",
+            str(profile.get("description", "")),
         )
     console.print(table)
 
