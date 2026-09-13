@@ -160,9 +160,15 @@ def pull(
     system: SystemOpt = "",
     dest: Optional[Path] = typer.Option(None, "--dest", "-d", help="Target folder."),
     subpackages: Annotated[bool, typer.Option(help="Include sub-package objects.")] = True,
-    flat: Annotated[bool, typer.Option(help="Keep abapGit's flat src/ layout.")] = False,
+    se80: Annotated[
+        bool, typer.Option("--se80", help="Lay files out as an SE80 folder tree.")
+    ] = False,
 ) -> None:
-    """Download a package into an SE80-style folder tree."""
+    """Download a package into a local folder.
+
+    The default is abapGit's flat src/ layout, the same as you would see in a
+    GitHub repo. Pass --se80 to mirror the SE80 object tree instead.
+    """
     target, password = _connect(system)
     root = _resolve_dest(dest, package)
 
@@ -185,7 +191,7 @@ def pull(
             if info.is_dir():
                 continue
             ref = layout.to_local_path(info.filename, package)
-            local = info.filename.lstrip("/") if flat else ref.local
+            local = ref.local if se80 else info.filename.lstrip("/")
             if ".." in Path(local).parts:
                 _fail(f"refusing unsafe path in archive: {info.filename}")
 
@@ -209,8 +215,7 @@ def pull(
         f"- {len(manifest.files)} files, {len(archive):,} bytes"
     )
     console.print(f"[dim]{root}[/]\n")
-    if not flat:
-        _print_tree(manifest.package, layout.tree_summary(refs))
+    _print_tree(manifest.package, layout.tree_summary(refs))
 
 
 @app.command()

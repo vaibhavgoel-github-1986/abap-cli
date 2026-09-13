@@ -2,9 +2,8 @@
 
 Bulk export and import of ABAP objects between an SAP system and a local folder.
 
-Pulls a whole package in one HTTP call, lays it out on disk the way SE80 shows it,
-and pushes back only what you changed — activating everything in a single mass
-activation.
+Pulls a whole package in one HTTP call and pushes back only what you changed —
+activating everything in a single mass activation.
 
 ```
 $ abap pull ZGET_SUBS_API_V2
@@ -92,14 +91,16 @@ the macOS keychain, and only then by prompting. In CI, set `$ABAP_PASSWORD`.
 ### Pull
 
 ```bash
-abap pull ZGET_SUBS_API_V2                      # SE80 tree, sub-packages included
+abap pull ZGET_SUBS_API_V2                      # flat src/ layout, sub-packages included
 abap pull ZGET_SUBS_API_V2 --no-subpackages     # this package only
-abap pull ZGET_SUBS_API_V2 --flat               # abapGit's flat src/ layout
+abap pull ZGET_SUBS_API_V2 --se80               # SE80-style folder tree
 abap pull ZGET_SUBS_API_V2 --dest ~/work/subs   # choose the folder
 abap pull ZSOME_PKG --system dha-300            # target another system
 ```
 
-Sub-package objects land under `Subpackages/<NAME>/…`, mirroring SE80.
+The default layout is abapGit's flat `src/`, identical to what a GitHub repo would
+show. `--se80` mirrors the SE80 object tree instead, with sub-package objects under
+`Subpackages/<NAME>/…`. Both push back the same way.
 
 ### Status and push
 
@@ -121,26 +122,36 @@ active version keeps running in that case.
 
 ## Local layout
 
+Default (flat, same as a GitHub repo):
+
 ```
 ZGET_SUBS_API_V2/
 ├── .abap/
 │   ├── manifest.json          # canonical paths + hashes, powers status and push
 │   └── snapshots/
+├── .abapgit.xml
+└── src/
+    ├── package.devc.xml
+    ├── zcl_subs_query_provider.clas.abap
+    ├── zcl_subs_query_provider.clas.xml
+    ├── zif_subs_dba.intf.abap
+    └── zcds_i_serv_h.ddls.asddls
+```
+
+With `--se80`:
+
+```
+ZGET_SUBS_API_V2/
 ├── package.devc.xml
 ├── Class Library/
 │   ├── Classes/ZCL_SUBS_QUERY_PROVIDER/
-│   │   ├── zcl_subs_query_provider.clas.abap
-│   │   ├── zcl_subs_query_provider.clas.xml
-│   │   └── zcl_subs_query_provider.clas.testclasses.abap
 │   └── Interfaces/ZIF_SUBS_DBA/
 ├── Core Data Services/Data Definitions/
-├── Service Definitions/
 └── Subpackages/<SUBPKG>/…
 ```
 
-The SE80 tree is a **view**. `manifest.json` keeps each file's canonical abapGit
-path, which is what gets sent back on push, so you can reorganise the display
-without breaking deployment.
+Either way `manifest.json` keeps each file's canonical abapGit path, which is what
+gets sent back on push - so the on-disk arrangement never affects deployment.
 
 ## Limitations
 
