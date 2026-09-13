@@ -28,7 +28,7 @@ err_console = Console(stderr=True)
 
 SystemOpt = Annotated[str, typer.Option("--system", "-s", help="Named system from config.")]
 DestOpt = Annotated[Path, typer.Option("--dest", "-d", help="Local folder for the package.")]
-PackageArg = Annotated[str, typer.Argument(help="SAP package, e.g. ZGET_SUBS_API_V2")]
+PackageArg = Annotated[str, typer.Argument(help="SAP package, e.g. ZEXAMPLE_API")]
 
 
 def _fail(message: str) -> None:
@@ -69,7 +69,7 @@ def version() -> None:
 
 @app.command()
 def init(
-    name: Annotated[str, typer.Option(prompt="System name (e.g. dha-110)")],
+    name: Annotated[str, typer.Option(prompt="System name (e.g. dev-100)")],
     host: Annotated[str, typer.Option(prompt="Host URL (https://host:port)")],
     user: Annotated[str, typer.Option(prompt="SAP user")],
     client: Annotated[str, typer.Option(prompt="SAP client")],
