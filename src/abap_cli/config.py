@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import keyring
+import keyring.errors
+
 CONFIG_HOME = Path.home() / ".abap-cli" / "config.json"
-KEYCHAIN_SERVICE = "abap-cli"
+KEYRING_SERVICE = "abap-cli"
 
 
 class ConfigError(Exception):
@@ -33,7 +34,6 @@ class System:
     @property
     def keychain_account(self) -> str:
         return f"{self.name}:{self.user}"
-
     def describe(self) -> str:
         return f"{self.user}@{self.host} client {self.client}"
 
@@ -151,45 +151,42 @@ def resolve(
 
 
 # --------------------------------------------------------------------------- secrets
+#
+# keyring picks the native store per platform: Keychain on macOS, Credential
+# Manager on Windows, Secret Service on Linux.
+
+
+def keyring_available() -> bool:
+    try:
+        return not isinstance(keyring.get_keyring(), keyring.backends.fail.Keyring)
+    except Exception:
+        return False
 
 
 def keychain_get(account: str) -> str:
-    """Read a stored password, or '' when unavailable."""
-    if sys.platform != "darwin":
-        return ""
+    """Read a stored password, or '' when there is none or no backend."""
     try:
-        result = subprocess.run(
-            ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
+        return keyring.get_password(KEYRING_SERVICE, account) or ""
+    except keyring.errors.KeyringError:
         return ""
-    return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def keychain_store(account: str) -> bool:
-    """Store a password. Omitting -w makes `security` prompt, so the secret
-    never reaches argv or a log."""
-    if sys.platform != "darwin":
+def keychain_store(account: str, password: str) -> bool:
+    try:
+        keyring.set_password(KEYRING_SERVICE, account, password)
+        return True
+    except keyring.errors.KeyringError:
         return False
-    result = subprocess.run(
-        ["security", "add-generic-password", "-U", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"]
-    )
-    return result.returncode == 0
 
 
 def keychain_delete(account: str) -> bool:
-    if sys.platform != "darwin":
+    try:
+        keyring.delete_password(KEYRING_SERVICE, account)
+        return True
+    except keyring.errors.KeyringError:
         return False
-    result = subprocess.run(
-        ["security", "delete-generic-password", "-s", KEYCHAIN_SERVICE, "-a", account],
-        capture_output=True,
-    )
-    return result.returncode == 0
 
 
 def password_for(system: System) -> str:
-    """$ABAP_PASSWORD, then the OS keychain. Empty string means 'ask the user'."""
+    """$ABAP_PASSWORD, then the OS credential store. Empty means 'ask the user'."""
     return os.environ.get("ABAP_PASSWORD", "") or keychain_get(system.keychain_account)

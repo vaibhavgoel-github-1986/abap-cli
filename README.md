@@ -39,6 +39,8 @@ Two things must be true, or nothing will work:
 python3 --version
 ```
 
+Windows, macOS and Linux are all supported.
+
 **2. The SAP system needs the ZSYNC endpoint installed.**
 
 `abap-cli` is only a client. It talks to `/sap/bc/zsync`, an HTTP service that has to
@@ -112,8 +114,15 @@ Repeat `abap init` for every system you use. The first one becomes your default.
 abap login
 ```
 
-macOS prompts you, and the password goes into your **login keychain** — never into a
-file, never into your shell history. You only do this once per system.
+You are prompted twice, and the password goes into your operating system's
+credential store — never into a file, never into your shell history. You only do
+this once per system.
+
+| Platform | Where it goes |
+|---|---|
+| macOS | Keychain |
+| Windows | Credential Manager |
+| Linux | Secret Service (GNOME Keyring / KWallet) |
 
 ### 3. Check the connection
 
@@ -298,16 +307,19 @@ You can edit this file by hand. `abap config` prints its path.
 
 ### Your password
 
-In the **macOS login keychain**, one entry per system:
+In your operating system's credential store — Keychain on macOS, Credential Manager
+on Windows, Secret Service on Linux. One entry per system:
 
 ```
 service: abap-cli
 account: dev-100:MYUSER
 ```
 
-Manage it with `abap login` / `abap logout`, or search for `abap-cli` in
-Keychain Access. On Linux and Windows there is no keychain support yet — use the
-`ABAP_PASSWORD` environment variable, or let it prompt you each time.
+Manage it with `abap login` / `abap logout`, or through your platform's own tool
+(Keychain Access, `credwiz`, Seahorse) by searching for `abap-cli`.
+
+On a headless machine with no credential store, `abap login` says so and you should
+use the `ABAP_PASSWORD` environment variable instead.
 
 ### Your downloaded code
 
@@ -385,6 +397,9 @@ No default set. Run `abap use <system>`, or add `--system` to the command.
 **`nothing to push - no local changes`**
 Your files match what was pulled. Check with `abap status`.
 
+**`no credential store available on this machine`**
+Common on headless Linux. Set `ABAP_PASSWORD` instead of using `abap login`.
+
 **SSL certificate errors**
 Internal CAs are often not trusted by Python. Re-add the system with
 `abap init --insecure`, or set `"insecure": true` in the config file.
@@ -415,7 +430,6 @@ package of 80+ objects transfers in about a second.
 - Deleting objects is not supported. Deleted local files are reported, then ignored.
 - A package already managed by an abapGit repo bound to a *different* package (for
   example a parent) is rejected, to avoid deploying against the wrong scope.
-- Keychain storage is macOS-only. Elsewhere, use `ABAP_PASSWORD`.
 - Pull and push work a package at a time, not on individual objects.
 
 ---

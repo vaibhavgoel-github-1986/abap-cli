@@ -48,9 +48,10 @@ def _connect(system_name: str) -> tuple[System, str]:
         password = typer.prompt(f"SAP password for {system.describe()}", hide_input=True)
         if not password:
             _fail("no password supplied")
-        console.print(
-            f"[dim]tip: 'abap login --system {system.name}' stores this in your keychain[/]"
-        )
+        if config.keyring_available():
+            console.print(
+                f"[dim]tip: 'abap login --system {system.name}' saves this for next time[/]"
+            )
     return system, password
 
 
@@ -163,17 +164,28 @@ def systems() -> None:
 
 @app.command()
 def login(system: SystemOpt = "") -> None:
-    """Store the SAP password for a system in the OS keychain."""
+    """Store the SAP password for a system in the OS credential store."""
     try:
         target = config.resolve(name=system)
     except ConfigError as exc:
         _fail(str(exc))
         return
+
+    if not config.keyring_available():
+        _fail(
+            "no credential store available on this machine. "
+            "Set the ABAP_PASSWORD environment variable instead."
+        )
+
     console.print(f"storing credentials for [bold]{target.describe()}[/]")
-    if config.keychain_store(target.keychain_account):
+    password = typer.prompt("SAP password", hide_input=True, confirmation_prompt=True)
+    if not password:
+        _fail("no password supplied")
+
+    if config.keychain_store(target.keychain_account, password):
         console.print("[green]stored[/]")
     else:
-        _fail("could not store the password (keychain is macOS only; use $ABAP_PASSWORD)")
+        _fail("the credential store rejected the password")
 
 
 @app.command()
