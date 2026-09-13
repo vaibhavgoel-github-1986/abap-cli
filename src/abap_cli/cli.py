@@ -55,8 +55,19 @@ def _connect(system_name: str) -> tuple[System, str]:
     return system, password
 
 
-def _resolve_dest(dest: Path | None, package: str) -> Path:
-    return (dest or Path.cwd() / package.upper()).resolve()
+def _resolve_root(dest: Path | None, package: str) -> Path:
+    """Where the package lives locally.
+
+    Running inside an already-pulled folder uses that folder, so naming the
+    package there does not create a nested copy of it.
+    """
+    if dest:
+        return dest.resolve()
+    here = Path.cwd().resolve()
+    current = Manifest.load(here)
+    if not package or (current.exists and current.package == package.upper()):
+        return here
+    return (here / package.upper()).resolve()
 
 
 # --------------------------------------------------------------------------- commands
@@ -215,21 +226,50 @@ def ping(system: SystemOpt = "") -> None:
 
 @app.command()
 def pull(
-    package: PackageArg,
+    package: PackageArg = "",
     system: SystemOpt = "",
     dest: Optional[Path] = typer.Option(None, "--dest", "-d", help="Target folder."),
-    subpackages: Annotated[bool, typer.Option(help="Include sub-package objects.")] = True,
+    subpackages: Annotated[
+        Optional[bool],
+        typer.Option("--subpackages/--no-subpackages", help="Include sub-package objects."),
+    ] = None,
     se80: Annotated[
-        bool, typer.Option("--se80", help="Lay files out as an SE80 folder tree.")
+        Optional[bool],
+        typer.Option("--se80/--flat", help="Lay files out as an SE80 folder tree."),
+    ] = None,
+    force: Annotated[
+        bool, typer.Option("--force", "-f", help="Overwrite local changes.")
     ] = False,
 ) -> None:
     """Download a package into a local folder.
 
-    The default is abapGit's flat src/ layout, the same as you would see in a
-    GitHub repo. Pass --se80 to mirror the SE80 object tree instead.
+    Run inside an already-pulled folder to refresh it: the package, system and
+    layout are taken from the last pull. The default layout is abapGit's flat
+    src/, the same as you would see in a GitHub repo.
     """
-    target, password = _connect(system)
-    root = _resolve_dest(dest, package)
+    root = _resolve_root(dest, package)
+    previous = Manifest.load(root)
+
+    if not package:
+        if not previous.exists:
+            _fail(f"no package given and no manifest in {root} - try 'abap pull <PACKAGE>'")
+        package = previous.package
+
+    if previous.exists and not force:
+        modified, deleted = previous.scan()
+        if modified or deleted:
+            for local in modified:
+                err_console.print(f"  [yellow]M[/]  {local}")
+            for local in deleted:
+                err_console.print(f"  [red]D[/]  {local}")
+            _fail(
+                f"{len(modified)} modified, {len(deleted)} deleted - push them, "
+                "or re-run with --force to discard and overwrite"
+            )
+
+    subpackages = previous.include_subpackages if subpackages is None else subpackages
+    se80 = previous.se80 if se80 is None else se80
+    target, password = _connect(system or previous.system)
 
     try:
         with SapClient(target, password) as sap:
@@ -243,6 +283,7 @@ def pull(
         package=package.upper(),
         system=target.name,
         include_subpackages=subpackages,
+        se80=se80,
     )
     refs = []
     with zipfile.ZipFile(io.BytesIO(archive)) as archive_file:
@@ -283,7 +324,7 @@ def status(
     dest: Optional[Path] = typer.Option(None, "--dest", "-d", help="Local folder."),
 ) -> None:
     """Show locally modified objects. Works offline, no credentials needed."""
-    root = _resolve_dest(dest, package) if (dest or package) else Path.cwd()
+    root = _resolve_root(dest, package)
     manifest = Manifest.load(root)
     if not manifest.exists:
         _fail(f"no manifest in {root}, run 'abap pull' first")
@@ -317,7 +358,7 @@ def push(
     snapshot: Annotated[bool, typer.Option(help="Save a rollback zip before writing.")] = True,
 ) -> None:
     """Upload locally modified objects and activate them."""
-    root = _resolve_dest(dest, package) if (dest or package) else Path.cwd()
+    root = _resolve_root(dest, package)
     manifest = Manifest.load(root)
     if not manifest.exists:
         _fail(f"no manifest in {root}, run 'abap pull' first")

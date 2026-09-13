@@ -36,6 +36,7 @@ class Manifest:
     system: str = ""
     pulled_at: str = ""
     include_subpackages: bool = True
+    se80: bool = False
     files: dict[str, Entry] = field(default_factory=dict)
 
     # ------------------------------------------------------------------ storage
@@ -56,6 +57,7 @@ class Manifest:
             system=raw.get("system", ""),
             pulled_at=raw.get("pulled_at", ""),
             include_subpackages=raw.get("include_subpackages", True),
+            se80=raw.get("se80", False),
             files={
                 local: Entry(
                     canonical=meta["canonical"],
@@ -77,6 +79,7 @@ class Manifest:
                     "system": self.system,
                     "pulled_at": self.pulled_at,
                     "include_subpackages": self.include_subpackages,
+                    "se80": self.se80,
                     "files": {
                         local: {
                             "canonical": entry.canonical,
