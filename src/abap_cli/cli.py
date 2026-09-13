@@ -333,6 +333,12 @@ def push(
     selected = manifest.files_of_objects(objects)
     extra = len(selected) - len(modified)
 
+    # abapGit drops a leading folder shared by every archive entry. Shipping only
+    # files from src/ would therefore strip src/ and make SAP look for the objects
+    # at the archive root, silently finding nothing. A root-level file prevents it.
+    anchors = [local for local in manifest.files if "/" not in local]
+    selected = sorted(set(selected) | set(anchors))
+
     console.print(f"edited   {len(modified)} file(s) in {len(objects)} object(s)")
     for obj_type, obj_name in sorted(objects):
         console.print(f"  [bold]{obj_type}[/] {obj_name}")
